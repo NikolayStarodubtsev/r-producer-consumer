@@ -70,7 +70,8 @@ class Application(object):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--getErrors', help='collect errors from Redis')
+    parser.add_argument('--getErrors', help='collect errors from Redis',
+                        action='store_true')
     args = parser.parse_args()
     app = Application()
     if args.getErrors:
