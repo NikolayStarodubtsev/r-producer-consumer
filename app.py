@@ -1,7 +1,7 @@
 import uuid
 import argparse
-import time
 import string
+import sys
 import random
 import redis
 
@@ -14,9 +14,12 @@ class Application(object):
     # Worker operations.
     def _check_privilege(self):
         print("Checking privilege")
+        if self.redis.zscore('messages', 'generated') > 100000:
+            print("Cap reached, no need in generator")
+            return False
         if self.redis.setnx('generator', self.name):
             self.redis.expire('generator', 1)
-            print("i'm an white male")
+            print("i'm a generator")
             return True
         else:
             print("Not my turn")
@@ -36,8 +39,10 @@ class Application(object):
                     self.redis.sadd('errors', msg[1])
                     print('Message: {} contains error'.format(msg[1]))
                 else:
-                    print('Consuming {}'.format(msg[1]))
-            time.sleep(0.25)
+                    print('Consuming {}, number {}'.format(
+                        msg[1], self.redis.zscore('messages', 'consumed')))
+            if self.redis.zincrby('messages', 'consumed') > 100000:
+                sys.exit()
         self.become_generator()
 
     # Generator operations.
@@ -50,9 +55,10 @@ class Application(object):
         while True:
             self.redis.expire('generator', 1)
             msg = self._generate_answer()
-            print "Message: {}".format(msg)
             self.redis.rpush('queue', msg)
-            time.sleep(0.5)
+            if self.redis.zincrby('messages', 'generated') > 100000:
+                sys.exit()
+            print "Message {}, number {}".format(msg, self.redis.zscore('messages', 'generated'))
 
     # Common operations.
     def collect_errors(self):
