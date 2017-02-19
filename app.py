@@ -31,7 +31,6 @@ class Application(object):
             if msg:
                 if self._check_error():
                     self.redis.sadd('errors', msg[1])
-                    print('Message: {} contains error'.format(msg[1]))
                 else:
                     print('Consuming {}'.format(msg[1]))
             time.sleep(0.25)
@@ -45,11 +44,15 @@ class Application(object):
 
     def become_generator(self):
         while True:
+            if self.redis.get('generator') != self.name:
+                if not self.redis.setnx('generator', self.name):
+                    break
             self.redis.expire('generator', 1)
             msg = self._generate_answer()
-            print "Message: {}".format(msg)
+            print "Generate: {}".format(msg)
             self.redis.rpush('queue', msg)
             time.sleep(0.5)
+        self.become_worker()
 
     # Common operations.
     def collect_errors(self):
