@@ -8,48 +8,53 @@ import redis
 
 class Application(object):
     def __init__(self):
-        self.redis = redis.Redis()
+        self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+        self.name = 'instance-{}'.format(uuid.uuid4().hex)
 
-    def _generator_exists(self):
-        clients = self.redis.client_list()
-        for client in clients:
-            if client['name'] == 'generator':
-                return True
-        return False
-
-    def _generate_answer(self):
-        s = string.letters + ' '
-        length = random.randint(10, 50)
-        return ''.join(random.choice(s) for i in range(length))
+    # Worker operations.
+    def _check_privilege(self):
+        print("Checking privilege")
+        if self.redis.setnx('generator', self.name):
+            self.redis.expire('generator', 1)
+            print("i'm an white male")
+            return True
+        else:
+            print("Not my turn")
+            return False
 
     def _check_error(self):
         if random.randint(0, 19) == 0:
             return True
 
-    def become_generator(self):
-        self.redis.client_setname('generator')
-        i = 0
-        while True:
-            msg = self._generate_answer()
-            self.redis.rpush('queue', msg)
-            i += 1
-            time.sleep(0.5)
-
     def become_worker(self):
         while True:
-            if not self._generator_exists():
+            if self._check_privilege():
                 break
-            name = 'consumer-{}'.format(uuid.uuid4().hex)
-            self.redis.client_setname(name)
-            msg = self.redis.blpop('queue')[1]
-            if self._check_error():
-                self.redis.sadd('errors', msg)
-                print('Message: {} contains error'.format(msg))
-            else:
-                print('Consuming {}'.format(msg))
+            msg = self.redis.blpop('queue', timeout=1)
+            if msg:
+                if self._check_error():
+                    self.redis.sadd('errors', msg[1])
+                    print('Message: {} contains error'.format(msg[1]))
+                else:
+                    print('Consuming {}'.format(msg[1]))
             time.sleep(0.25)
         self.become_generator()
 
+    # Generator operations.
+    def _generate_answer(self):
+        s = string.letters + ' '
+        length = random.randint(10, 50)
+        return ''.join(random.choice(s) for i in range(length))
+
+    def become_generator(self):
+        while True:
+            self.redis.expire('generator', 1)
+            msg = self._generate_answer()
+            print "Message: {}".format(msg)
+            self.redis.rpush('queue', msg)
+            time.sleep(0.5)
+
+    # Common operations.
     def collect_errors(self):
         print("This messages contains errors:")
         i = 1
@@ -62,7 +67,7 @@ class Application(object):
                 break
 
     def start(self):
-        if not self._generator_exists():
+        if self._check_privilege():
             self.become_generator()
         else:
             self.become_worker()
