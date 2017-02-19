@@ -1,4 +1,5 @@
 import uuid
+import time
 import argparse
 import string
 import sys
@@ -53,12 +54,18 @@ class Application(object):
 
     def become_generator(self):
         while True:
+            if self.redis.get('generator') != self.name:
+                if not self.redis.setnx('generator', self.name):
+                    break
             self.redis.expire('generator', 1)
             msg = self._generate_answer()
             self.redis.rpush('queue', msg)
             if self.redis.zincrby('messages', 'generated') > 100000:
                 sys.exit()
-            print "Message {}, number {}".format(msg, self.redis.zscore('messages', 'generated'))
+            print "Generate {}, number {}".format(msg, self.redis.zscore('messages', 'generated'))
+            if random.randint(0, 20) == 0:
+                time.sleep(2)
+        self.become_worker()
 
     # Common operations.
     def collect_errors(self):
