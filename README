@@ -1,0 +1,17 @@
+Redis two-in-one consumer-worker.
+
+This is a small application which can be both producer and consumer of messages.
+
+As a generator it can do this:
+* Generate random string message.
+* Become a worker if new generator arrive in case of timeout(e.g. network lag).
+
+As a worker it can do this:
+* Consume messages (each message will be consume only once).
+* Detect error in message and take it to Redis DB for future analysis.
+* Become a generator if the old one is missing.
+
+If you start an application with --getErrors key it will collect all error
+messages from Redis, and empty it.
+
+WARNING: No configs or logging available, it's kinda out of scope for this task.
